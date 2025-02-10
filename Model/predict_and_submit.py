@@ -36,7 +36,7 @@ def predict_and_submit(
     all_preds = []
     
     with torch.no_grad():
-        for texts in tqdm(test_loader):
+        for texts in tqdm(test_loader, desc='predict...'):
             
             pred_motions = model(texts)  # shape: (batch_size, 6600)
             # Move to CPU, convert to NumPy
@@ -100,7 +100,7 @@ def predict(
     all_texts = []
     
     with torch.no_grad():
-        for texts in tqdm(test_loader):
+        for texts in tqdm(test_loader, desc='predict...'):
             
             pred_motions = model(texts)  # shape: (batch_size, 6600)
             # Move to CPU, convert to NumPy
