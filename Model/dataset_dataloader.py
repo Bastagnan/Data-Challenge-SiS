@@ -59,7 +59,46 @@ class MotionDataset(Dataset):
         
         return motion, text
     
+class TestDataset(Dataset):
     
+    def __init__(self, data_dir, ids_file):
+        
+        self.data_dir = data_dir
+        self.ids_file  = ids_file
+        self.mean = mean
+        self.std = std
+        
+        ## read ids
+        with open(pjoin(data_dir, ids_file)) as fd:
+            self.list_ids = fd.read().strip().split('\n')
+            
+        ## load data
+        texts = []
+        for file_id in tqdm(self.list_ids, desc='loading data...'):
+            ## get paths
+            text_path = pjoin(self.data_dir, 'texts', file_id + '.txt')
+            
+            ## load text
+            with open(text_path) as fd:
+                motion_descriptions = fd.read().strip().split('\n')
+            
+            texts.append(motion_descriptions)
+            
+        self.texts = texts
+        
+    def __len__(self):
+        return len(self.list_ids)
+    
+    def __getitem__(self, index):
+        motion_texts = self.texts[index]
+        
+        ## pick random text
+        text = random.choice(motion_texts)
+        text = text.split('#')[0]
+        
+        return text
+
+
 if __name__ == '__main__':
     data_dir = './'
     train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
