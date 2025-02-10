@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from os.path import join as pjoin
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from dataset_dataloader import TestDataset
 
@@ -35,7 +36,7 @@ def predict_and_submit(
     all_preds = []
     
     with torch.no_grad():
-        for texts in test_loader:
+        for texts in tqdm(test_loader):
             
             pred_motions = model(texts)  # shape: (batch_size, 6600)
             # Move to CPU, convert to NumPy
@@ -99,14 +100,14 @@ def predict(
     all_texts = []
     
     with torch.no_grad():
-        for texts in test_loader:
+        for texts in tqdm(test_loader):
             
             pred_motions = model(texts)  # shape: (batch_size, 6600)
             # Move to CPU, convert to NumPy
             pred_motions = pred_motions.cpu().numpy()  # shape: (B, 6600)
             
             B = pred_motions.shape[0]
-            
+
             # We'll accumulate predictions
             all_preds.append(pred_motions.reshape(B,100,22,3))
             all_texts.append(texts)
