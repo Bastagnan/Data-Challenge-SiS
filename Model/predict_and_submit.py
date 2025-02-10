@@ -73,7 +73,6 @@ def predict(
     model,
     data_dir="/kaggle/input/motion",
     test_file="test.txt",
-    output_csv="submission.csv",
     batch_size=16,
     n_frames=100,
     n_joints=22
@@ -111,5 +110,8 @@ def predict(
     
     # Concatenate all predictions: shape => (N, 100,22,3)
     all_preds = np.concatenate(all_preds, axis=0)
+
+    with open(pjoin(data_dir, ids_file)) as fd:
+        test_motion_ids = fd.read().strip().split('\n')
     
-    return all_texts, all_preds
+    return test_motion_ids, all_texts, all_preds
