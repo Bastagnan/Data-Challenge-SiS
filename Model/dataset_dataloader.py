@@ -61,7 +61,7 @@ class MotionDataset(Dataset):
     
     
 if __name__ == '__main__':
-    data_dir = './path/to/data/'
+    data_dir = './'
     train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
     valid_set = MotionDataset(data_dir, 'val.txt', mean=None, std=None)
 
