@@ -48,7 +48,7 @@ def predict_and_submit(
     all_preds = np.concatenate(all_preds, axis=0)
     
     ## read ids
-    with open(pjoin(data_dir, ids_file)) as fd:
+    with open(pjoin(data_dir, test_file)) as fd:
         test_motion_ids = fd.read().strip().split('\n')
     
     # Build the submission rows
@@ -112,7 +112,7 @@ def predict(
     # Concatenate all predictions: shape => (N, 100,22,3)
     all_preds = np.concatenate(all_preds, axis=0)
 
-    with open(pjoin(data_dir, ids_file)) as fd:
+    with open(pjoin(data_dir, test_file)) as fd:
         test_motion_ids = fd.read().strip().split('\n')
     
     return test_motion_ids, all_texts, all_preds
