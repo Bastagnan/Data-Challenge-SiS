@@ -106,7 +106,7 @@ def predict(
             pred_motions = pred_motions.cpu().numpy()  # shape: (B, 6600)
             
             # We'll accumulate predictions
-            all_preds.append(pred_motions.reshape(100,22,3))
+            all_preds.append(pred_motions.reshape(batch_size,100,22,3))
             all_texts.append(texts)
     
     # Concatenate all predictions: shape => (N, 100,22,3)
