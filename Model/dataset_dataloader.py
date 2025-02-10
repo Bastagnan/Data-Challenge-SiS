@@ -65,8 +65,6 @@ class TestDataset(Dataset):
         
         self.data_dir = data_dir
         self.ids_file  = ids_file
-        self.mean = mean
-        self.std = std
         
         ## read ids
         with open(pjoin(data_dir, ids_file)) as fd:
