@@ -1,1 +1,4 @@
-./venv
+venv/
+motions/
+texts/
+.ipynb_checkpoints/
