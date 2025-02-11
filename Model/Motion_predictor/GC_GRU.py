@@ -18,7 +18,7 @@ class GraphConvGRUCell(nn.Module):
         # Graph Convolution for hidden state
         self.gcn_h = GraphConv(hidden_size, hidden_size)
         
-    def forward(self, g_batch, x, h_prev):
+    def forward(self, g_batch, x, h_prev, init):
         """
         g_batch: batched DGL graph with (batch_size * num_nodes) total nodes.
         x: shape (batch_size, input_size).
@@ -32,11 +32,19 @@ class GraphConvGRUCell(nn.Module):
         # GraphConv operation
         h_conv = self.gcn_h(g_batch, h_prev_flat)
         h_conv = h_conv.view(B, N, H)
+
+        if init == True:
         
-        # Compute GRU gates
-        x_r = self.w_r(x).unsqueeze(1).expand(-1, N, -1)
-        x_z = self.w_z(x).unsqueeze(1).expand(-1, N, -1)
-        x_h = self.w_h(x).unsqueeze(1).expand(-1, N, -1)
+            # Compute GRU gates
+            x_r = self.w_r(x).unsqueeze(1).expand(-1, N, -1)
+            x_z = self.w_z(x).unsqueeze(1).expand(-1, N, -1)
+            x_h = self.w_h(x).unsqueeze(1).expand(-1, N, -1)
+
+        else:
+            # Compute GRU gates
+            x_r = self.w_r(x)
+            x_z = self.w_z(x)
+            x_h = self.w_h(x)
         
         r_t = torch.sigmoid(x_r + h_conv)
         z_t = torch.sigmoid(x_z + h_conv)
@@ -103,7 +111,7 @@ class GraphConvGRU(nn.Module):
         outputs = []
         for t in range(self.seq_len):
             for layer in range(self.num_layers):
-                h[layer] = self.gru_cells[layer](g_batch, x if layer == 0 else h[layer-1], h[layer])
+                h[layer] = self.gru_cells[layer](g_batch, x if layer == 0 else h[layer-1], h[layer], init= True if layer == 0 else False)
             outputs.append(h[-1].view(B, N, self.hidden_size).unsqueeze(1))
 
         # (B, seq_len, N, hidden_size)
