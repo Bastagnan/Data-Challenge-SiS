@@ -3,3 +3,5 @@ jupyter
 tqdm
 matplotlib
 torch
+torchdata
+dgl
