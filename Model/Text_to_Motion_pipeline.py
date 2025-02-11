@@ -85,27 +85,27 @@ def compute_initial_distances_torch(X0, A):
     
     return d0_matrix
 
-def loss_distance_between_points_torch(X_gt, X_seq, A):
-    """
-    Compute the batch loss ensuring that each edge maintains its initial distance.
+# def loss_distance_between_points_torch(X_gt, X_seq, A):
+#     """
+#     Compute the batch loss ensuring that each edge maintains its initial distance.
     
-    Args:
-    - X_seq: Tensor of shape (B, T, N, D), node positions over time for a batch.
-    - A: Tensor of shape (N, N), adjacency matrix.
+#     Args:
+#     - X_seq: Tensor of shape (B, T, N, D), node positions over time for a batch.
+#     - A: Tensor of shape (N, N), adjacency matrix.
     
-    Returns:
-    - loss: Scalar tensor (mean squared loss).
-    """
-    B, T, N, D = X_seq.shape
-    d0_matrix = compute_initial_distances_torch(X_gt[:, 0], A)  # (B, N, N)
-    loss = torch.tensor(0.0, device=X_seq.device)
+#     Returns:
+#     - loss: Scalar tensor (mean squared loss).
+#     """
+#     B, T, N, D = X_seq.shape
+#     d0_matrix = compute_initial_distances_torch(X_gt[:, 0], A)  # (B, N, N)
+#     loss = torch.tensor(0.0, device=X_seq.device)
 
-    for t in range(T):
-        indices = torch.where(A > 0)  # Get connected node indices
-        distances = torch.norm(X_seq[:, t, indices[0], :] - X_seq[:, t, indices[1], :], dim=-1)  # (B, num_edges)
-        loss += torch.sum((distances - d0_matrix[:, indices[0], indices[1]]) ** 2)
+#     for t in range(T):
+#         indices = torch.where(A > 0)  # Get connected node indices
+#         distances = torch.norm(X_seq[:, t, indices[0], :] - X_seq[:, t, indices[1], :], dim=-1)  # (B, num_edges)
+#         loss += torch.sum((distances - d0_matrix[:, indices[0], indices[1]]) ** 2)
 
-    return loss / (B * T)  # Normalize by batch size and time steps
+#     return loss / (B * T)  # Normalize by batch size and time steps
 
 
 
