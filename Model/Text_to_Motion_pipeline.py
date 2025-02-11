@@ -88,6 +88,8 @@ def train(model,
             # Forward pass with CLIP encoder -> motion predictor
             pred_motion = model(texts)  # shape => (batch_size, motion_dim) in float32
 
+            print('pred_motion: ',pred_motion.size())
+
             loss = criterion(pred_motion, gt_motion)
             optimizer.zero_grad()
             loss.backward()
