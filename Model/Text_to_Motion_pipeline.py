@@ -84,12 +84,9 @@ def train(model,
 
             # Flatten GT motion
             gt_motion = motions.view(motions.size(0), -1)  # (batch_size, motion_dim)
-            print("Ground truth motion shape:", gt_motion.size())
 
             # Forward pass with CLIP encoder -> motion predictor
             pred_motion = model(texts)  # shape => (batch_size, motion_dim) in float32
-
-            print('pred_motion: ',pred_motion.size())
 
             loss = criterion(pred_motion, gt_motion)
             optimizer.zero_grad()
