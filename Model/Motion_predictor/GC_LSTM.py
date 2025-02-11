@@ -131,3 +131,14 @@ class GraphConvLSTM(nn.Module):
         outputs = torch.cat(outputs, dim=1)
         # flatten => (B, seq_len*N*hidden_size)
         return outputs.view(B, -1)
+
+if __name__ == '__main__':
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = GraphConvLSTM(input_size=32, hidden_size=3, num_layers=1, seq_len=100).to(device)
+
+    B = 4  # small batch for testing
+    x = torch.randn(B, 32, device=device)   # shape (batch_size, input_size)
+    out = model(x)
+    print("Output shape:", out.shape)
+    # Expected => (4, 100*22*3) = (4, 6600)
+
