@@ -46,9 +46,6 @@ class GraphConvLSTMCell(nn.Module):
         x_o_expanded = x_o.unsqueeze(1).expand(-1, N, -1)
         x_c_expanded = x_c.unsqueeze(1).expand(-1, N, -1)
 
-        print('xi expanded: ', x_i_expanded.size())
-        print('hconv: ', h_conv.size())
-
         i_t = torch.sigmoid(x_i_expanded + h_conv)
         f_t = torch.sigmoid(x_f_expanded + h_conv)
         o_t = torch.sigmoid(x_o_expanded + h_conv)
@@ -105,7 +102,7 @@ class GraphConvLSTM(nn.Module):
         x: shape (batch_size, input_size)
 
         """
-        print('x size',x.size())
+
         B = x.shape[0]
         N = self.base_graph.num_nodes()
 
@@ -129,19 +126,15 @@ class GraphConvLSTM(nn.Module):
                 h[layer], c[layer] = self.lstm_cells[layer](
                     g_batch, x, h[layer], c[layer]
                 )
-            print(h[-1].size())
             outputs.append(h[-1].view(B, N, self.hidden_size).unsqueeze(1))  # reshape properly
 
-        print(len(outputs), outputs[0].size())
 
         # (B, seq_len, N, hidden_size)
         outputs = torch.cat(outputs, dim=1)
         # flatten => (B, seq_len*N*hidden_size)
-        print(f"Raw outputs shape: {outputs.shape}")
 
-        outputs = outputs.view(B, -1)  # Should be (B, 6600)
+        outputs = outputs.view(B, -1) 
 
-        print(f"Final output shape: {outputs.shape}")
         return outputs
 
 if __name__ == '__main__':
