@@ -9,59 +9,78 @@ class GraphConvLSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(GraphConvLSTMCell, self).__init__()
         self.hidden_size = hidden_size
-
-        # Dense transformations for input (constant across timesteps)
+        # Dense transformations for input
         self.w_i = nn.Linear(input_size, hidden_size)
         self.w_f = nn.Linear(input_size, hidden_size)
         self.w_o = nn.Linear(input_size, hidden_size)
         self.w_c = nn.Linear(input_size, hidden_size)
 
-        # Graph Convolution for hidden state updates
+        # Graph Convolution for hidden state
         self.gcn_h = GraphConv(hidden_size, hidden_size)
 
-    def forward(self, g, x, h_prev, c_prev):
+    def forward(self, g_batch, x, h_prev, c_prev):
         """
-        g: DGL Graph (fixed topology)
-        x: Fixed input vector (batch_size, input_size) (same for all timesteps)
-        h_prev: Hidden state (batch_size, num_nodes, hidden_size)
-        c_prev: Cell state (batch_size, num_nodes, hidden_size)
+        g_batch: DGL batched graph with (batch_size * num_nodes) total nodes
+        x: (batch_size, input_size)
+        h_prev: (batch_size, num_nodes, hidden_size)
+        c_prev: (batch_size, num_nodes, hidden_size)
         """
-        batch_size, num_nodes, _ = h_prev.shape
+        B, N, H = h_prev.shape  # e.g. (16, 22, hidden_size)
 
-        # Transform input once and expand to all nodes
-        x_t = self.w_i(x).unsqueeze(1).expand(-1, num_nodes, -1)  
-        i_t = torch.sigmoid(x_t + self.gcn_h(g, h_prev))
+        # Flatten h_prev => shape (B*N, H)
+        h_prev_flat = h_prev.view(B * N, H)
 
-        x_t = self.w_f(x).unsqueeze(1).expand(-1, num_nodes, -1)
-        f_t = torch.sigmoid(x_t + self.gcn_h(g, h_prev))
+        # GraphConv expects (B*N, H)
+        h_conv = self.gcn_h(g_batch, h_prev_flat)  # => shape (B*N, H)
+        h_conv = h_conv.view(B, N, H)  # reshape back to (B, N, H)
 
-        x_t = self.w_o(x).unsqueeze(1).expand(-1, num_nodes, -1)
-        o_t = torch.sigmoid(x_t + self.gcn_h(g, h_prev))
+        # i/f/o/c gates need transformations of x
+        x_i = self.w_i(x)  # => (B, H)
+        x_f = self.w_f(x)
+        x_o = self.w_o(x)
+        x_c = self.w_c(x)
 
-        x_t = self.w_c(x).unsqueeze(1).expand(-1, num_nodes, -1)
-        c_tilde = torch.tanh(x_t + self.gcn_h(g, h_prev))
+        # Expand each to (B, N, H) for node-wise ops
+        x_i_expanded = x_i.unsqueeze(1).expand(-1, N, -1)
+        x_f_expanded = x_f.unsqueeze(1).expand(-1, N, -1)
+        x_o_expanded = x_o.unsqueeze(1).expand(-1, N, -1)
+        x_c_expanded = x_c.unsqueeze(1).expand(-1, N, -1)
+
+        i_t = torch.sigmoid(x_i_expanded + h_conv)
+        f_t = torch.sigmoid(x_f_expanded + h_conv)
+        o_t = torch.sigmoid(x_o_expanded + h_conv)
+        c_tilde = torch.tanh(x_c_expanded + h_conv)
 
         c_t = f_t * c_prev + i_t * c_tilde
         h_t = o_t * torch.tanh(c_t)
 
         return h_t, c_t
 
+
 class GraphConvLSTM(nn.Module):
-    def __init__(self, input_size = 32, hidden_size = 3, num_layers=1, seq_len=100):
+    def __init__(self, input_size=32, hidden_size=3, num_layers=1, seq_len=100):
         super(GraphConvLSTM, self).__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
         self.seq_len = seq_len
-        self.lstm_cells = nn.ModuleList([GraphConvLSTMCell(input_size if i == 0 else hidden_size, hidden_size) for i in range(num_layers)])
 
-        self.graph = self.build_graph()
+        self.lstm_cells = nn.ModuleList([
+            GraphConvLSTMCell(
+                input_size if i == 0 else hidden_size,
+                hidden_size
+            ) for i in range(num_layers)
+        ])
+
+        # Build a "base graph" once with 22 nodes
+        self.base_graph = self.build_graph()
 
     def build_graph(self):
+        # Same adjacency building as before
         adj_list = [
-            [0, 2, 5, 8, 11], 
-            [0, 1, 4, 7, 10], 
-            [0, 3, 6, 9, 12, 15], 
-            [9, 14, 17, 19, 21], 
+            [0, 2, 5, 8, 11],
+            [0, 1, 4, 7, 10],
+            [0, 3, 6, 9, 12, 15],
+            [9, 14, 17, 19, 21],
             [9, 13, 16, 18, 20]
         ]
         num_nodes = max(max(sublist) for sublist in adj_list) + 1
@@ -76,22 +95,38 @@ class GraphConvLSTM(nn.Module):
 
         src, dst = np.nonzero(adj_matrix)
         g = dgl.graph((src, dst))
-
         return g
 
     def forward(self, x):
-        batch_size = x.shape[0]
-        num_nodes = self.graph.num_nodes()
-        
-        h = [torch.zeros(batch_size, num_nodes, self.hidden_size).to(x.device) for _ in range(self.num_layers)]
-        c = [torch.zeros(batch_size, num_nodes, self.hidden_size).to(x.device) for _ in range(self.num_layers)]
-        
+        """
+        x: shape (batch_size, input_size)
+        """
+        B = x.shape[0]
+        N = self.base_graph.num_nodes()
+
+        # Build a batched graph: replicate base_graph B times
+        graphs = [self.base_graph.clone() for _ in range(B)]
+        g_batch = dgl.batch(graphs)  # single graph with B*N nodes
+
+        # Initialize hidden states
+        h = [
+            torch.zeros(B, N, self.hidden_size, device=x.device)
+            for _ in range(self.num_layers)
+        ]
+        c = [
+            torch.zeros(B, N, self.hidden_size, device=x.device)
+            for _ in range(self.num_layers)
+        ]
+
         outputs = []
         for t in range(self.seq_len):
             for layer in range(self.num_layers):
-                h[layer], c[layer] = self.lstm_cells[layer](self.graph, x, h[layer], c[layer])
-            
-            outputs.append(h[-1].unsqueeze(1))
-        
+                h[layer], c[layer] = self.lstm_cells[layer](
+                    g_batch, x, h[layer], c[layer]
+                )
+            outputs.append(h[-1].unsqueeze(1))  # last layer hidden state
+
+        # (B, seq_len, N, hidden_size)
         outputs = torch.cat(outputs, dim=1)
-        return outputs.view(batch_size, -1)
+        # flatten => (B, seq_len*N*hidden_size)
+        return outputs.view(B, -1)
