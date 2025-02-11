@@ -103,7 +103,9 @@ class GraphConvLSTM(nn.Module):
     def forward(self, x):
         """
         x: shape (batch_size, input_size)
+
         """
+        print('x size',x.size())
         B = x.shape[0]
         N = self.base_graph.num_nodes()
 
