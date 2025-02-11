@@ -55,7 +55,7 @@ class GraphConvGRU(nn.Module):
 
         # GRU cells
         self.gru_cells = nn.ModuleList([
-            GraphConvGRUCell(input_size if i == 0 else hidden_size, hidden_size)
+            GraphConvGRUCell(input_size, hidden_size)
             for i in range(num_layers)
         ])
 
@@ -83,6 +83,7 @@ class GraphConvGRU(nn.Module):
 
         src, dst = np.nonzero(adj_matrix)
         g = dgl.graph((src, dst))
+
         return g
 
     def forward(self, x):
