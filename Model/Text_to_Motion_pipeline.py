@@ -41,8 +41,8 @@ class Text2MotionPipeline(nn.Module):
 # --------------------
 def train(model, 
           data_dir='/kaggle/input/motion',  # point to Kaggle dataset
-          train_dataloader = None,
-          val_dataloader = None,
+          train_loader = None,
+          val_loader = None,
           num_epochs=10, 
           batch_size=16, 
           lr=1e-3,
