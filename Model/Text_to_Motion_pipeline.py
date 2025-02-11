@@ -102,14 +102,14 @@ def train(model,
         model.eval()
         val_loss = 0
         with torch.no_grad():
-            for motions, texts in valid_loader:
+            for motions, texts in val_loader:
                 motions = motions.to(device).float()
                 gt_motion = motions.view(motions.size(0), -1)
                 pred_motion = model(texts)
                 loss = criterion(pred_motion, gt_motion)
                 val_loss += loss.item() * len(motions)
 
-        val_loss /= len(valid_loader.dataset)
+        val_loss /= len(val_loader.dataset)
         print(f"[Epoch {epoch+1}] Val Loss: {val_loss:.4f}")
 
     print("Training complete!")
