@@ -72,7 +72,8 @@ class GraphConvLSTM(nn.Module):
         ])
 
         # Build a "base graph" once with 22 nodes
-        self.base_graph = self.build_graph()
+        self.base_graph = self.build_graph().to('cuda') 
+        print('to Cuda')
 
     def build_graph(self):
         # Same adjacency building as before
