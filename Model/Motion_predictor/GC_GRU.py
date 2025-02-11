@@ -63,7 +63,7 @@ class GraphConvGRU(nn.Module):
         self.base_graph = self.build_graph().to('cuda')
 
     def build_graph(self):
-        # Define adjacency list
+        # Same adjacency building as before
         adj_list = [
             [0, 2, 5, 8, 11],
             [0, 1, 4, 7, 10],
@@ -73,14 +73,14 @@ class GraphConvGRU(nn.Module):
         ]
         num_nodes = max(max(sublist) for sublist in adj_list) + 1
         adj_matrix = np.zeros((num_nodes, num_nodes), dtype=int)
-        
+
         for sublist in adj_list:
             for i in range(len(sublist)):
                 for j in range(i + 1, len(sublist)):
                     node1, node2 = sublist[i], sublist[j]
                     adj_matrix[node1, node2] = 1
                     adj_matrix[node2, node1] = 1
-        
+
         src, dst = np.nonzero(adj_matrix)
         g = dgl.graph((src, dst))
         return g
