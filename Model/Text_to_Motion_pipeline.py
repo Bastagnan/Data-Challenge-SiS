@@ -49,7 +49,7 @@ def train(model,
           n_frames=100, 
           n_joints=22):
 
-    if train_dataloader == None and val_dataloader == None:
+    if train_loader == None and val_loader == None:
         # Create dataset / dataloaders
         train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
         valid_set = MotionDataset(data_dir, 'val.txt', mean=None, std=None)
