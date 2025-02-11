@@ -41,18 +41,21 @@ class Text2MotionPipeline(nn.Module):
 # --------------------
 def train(model, 
           data_dir='/kaggle/input/motion',  # point to Kaggle dataset
+          train_dataloader = None,
+          val_dataloader = None,
           num_epochs=10, 
           batch_size=16, 
           lr=1e-3,
           n_frames=100, 
           n_joints=22):
 
-    # Create dataset / dataloaders
-    train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
-    valid_set = MotionDataset(data_dir, 'val.txt', mean=None, std=None)
-    
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False)
+    if train_dataloader == None and val_dataloader == None:
+        # Create dataset / dataloaders
+        train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
+        valid_set = MotionDataset(data_dir, 'val.txt', mean=None, std=None)
+        
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+        valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False)
 
     # On GPU if available
     device = "cuda" if torch.cuda.is_available() else "cpu"
