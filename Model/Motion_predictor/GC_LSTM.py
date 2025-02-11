@@ -127,6 +127,8 @@ class GraphConvLSTM(nn.Module):
                 )
             outputs.append(h[-1].unsqueeze(1))  # last layer hidden state
 
+        print(len(outputs), outputs[0].size())
+
         # (B, seq_len, N, hidden_size)
         outputs = torch.cat(outputs, dim=1)
         # flatten => (B, seq_len*N*hidden_size)
