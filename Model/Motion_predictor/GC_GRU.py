@@ -103,7 +103,7 @@ class GraphConvGRU(nn.Module):
         outputs = []
         for t in range(self.seq_len):
             for layer in range(self.num_layers):
-                h[layer] = self.gru_cells[layer](g_batch, x, h[layer])
+                h[layer] = self.gru_cells[layer](g_batch, x if layer == 0 else h[layer-1], h[layer])
             outputs.append(h[-1].view(B, N, self.hidden_size).unsqueeze(1))
 
         # (B, seq_len, N, hidden_size)
