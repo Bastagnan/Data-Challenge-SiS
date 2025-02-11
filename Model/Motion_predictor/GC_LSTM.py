@@ -46,6 +46,9 @@ class GraphConvLSTMCell(nn.Module):
         x_o_expanded = x_o.unsqueeze(1).expand(-1, N, -1)
         x_c_expanded = x_c.unsqueeze(1).expand(-1, N, -1)
 
+        print('xi expanded: ', x_i_expanded.size())
+        print('hconv: ', h_conv.size())
+
         i_t = torch.sigmoid(x_i_expanded + h_conv)
         f_t = torch.sigmoid(x_f_expanded + h_conv)
         o_t = torch.sigmoid(x_o_expanded + h_conv)
@@ -73,7 +76,6 @@ class GraphConvLSTM(nn.Module):
 
         # Build a "base graph" once with 22 nodes
         self.base_graph = self.build_graph().to('cuda') 
-        print('to Cuda')
 
     def build_graph(self):
         # Same adjacency building as before
