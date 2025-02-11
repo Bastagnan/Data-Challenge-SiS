@@ -18,6 +18,11 @@ class GraphConvGRUCell(nn.Module):
         # Graph Convolution for hidden state
         self.gcn_h = GraphConv(hidden_size, hidden_size)
         
+        # Layer Normalization
+        self.norm_r = nn.LayerNorm(hidden_size)
+        self.norm_z = nn.LayerNorm(hidden_size)
+        self.norm_h = nn.LayerNorm(hidden_size)
+        
     def forward(self, g_batch, x, h_prev, init):
         """
         g_batch: batched DGL graph with (batch_size * num_nodes) total nodes.
@@ -33,25 +38,26 @@ class GraphConvGRUCell(nn.Module):
         h_conv = self.gcn_h(g_batch, h_prev_flat)
         h_conv = h_conv.view(B, N, H)
 
-        if init == True:
-        
-            # Compute GRU gates
+        # Compute GRU gates
+        if init:
             x_r = self.w_r(x).unsqueeze(1).expand(-1, N, -1)
             x_z = self.w_z(x).unsqueeze(1).expand(-1, N, -1)
             x_h = self.w_h(x).unsqueeze(1).expand(-1, N, -1)
-
         else:
-            # Compute GRU gates
             x_r = self.w_r(x)
             x_z = self.w_z(x)
             x_h = self.w_h(x)
+
+        # Apply Layer Normalization before activation
+        r_t = torch.sigmoid(self.norm_r(x_r + h_conv))
+        z_t = torch.sigmoid(self.norm_z(x_z + h_conv))
+        h_tilde = torch.tanh(self.norm_h(x_h + r_t * h_conv))
         
-        r_t = torch.sigmoid(x_r + h_conv)
-        z_t = torch.sigmoid(x_z + h_conv)
-        h_tilde = torch.tanh(x_h + r_t * h_conv)
+        # GRU update
         h_t = (1 - z_t) * h_prev + z_t * h_tilde
         
         return h_t
+
 
 
 class GraphConvGRU(nn.Module):
