@@ -36,6 +36,79 @@ class Text2MotionPipeline(nn.Module):
         motion_pred = self.motion_predictor(text_emb)
         return motion_pred
 
+
+def adj_matrix():
+    """
+    Create the adjacency matrix as a PyTorch tensor.
+    
+    Returns:
+    - A: Tensor of shape (N, N) representing the adjacency matrix.
+    """
+    adj_list = [
+        [0, 2, 5, 8, 11],
+        [0, 1, 4, 7, 10],
+        [0, 3, 6, 9, 12, 15],
+        [9, 14, 17, 19, 21],
+        [9, 13, 16, 18, 20]
+    ]
+    
+    num_nodes = max(max(sublist) for sublist in adj_list) + 1
+    A = torch.zeros((num_nodes, num_nodes), dtype=torch.float32)
+
+    for sublist in adj_list:
+        for i in range(len(sublist)):
+            for j in range(i + 1, len(sublist)):
+                node1, node2 = sublist[i], sublist[j]
+                A[node1, node2] = 1
+                A[node2, node1] = 1  # Ensure symmetry
+
+    return A
+
+
+def compute_initial_distances_torch(X0, A):
+    """
+    Compute d_{ij}^0 for each edge in the graph based on the initial positions.
+    
+    Args:
+    - X0: Tensor of shape (B, N, D), initial node positions for the batch.
+    - A: Tensor of shape (N, N), adjacency matrix.
+    
+    Returns:
+    - d0_matrix: Tensor of shape (B, N, N) with initial edge distances.
+    """
+    indices = torch.where(A > 0)  # Get indices of connected nodes
+    d0_matrix = torch.zeros_like(A, dtype=torch.float32).unsqueeze(0).expand(X0.shape[0], -1, -1)  # (B, N, N)
+    
+    distances = torch.norm(X0[:, indices[0], :] - X0[:, indices[1], :], dim=-1)  # (B, num_edges)
+    d0_matrix[:, indices[0], indices[1]] = distances
+    d0_matrix[:, indices[1], indices[0]] = distances  # Symmetric
+    
+    return d0_matrix
+
+def loss_distance_between_points_torch(X_gt, X_seq, A):
+    """
+    Compute the batch loss ensuring that each edge maintains its initial distance.
+    
+    Args:
+    - X_seq: Tensor of shape (B, T, N, D), node positions over time for a batch.
+    - A: Tensor of shape (N, N), adjacency matrix.
+    
+    Returns:
+    - loss: Scalar tensor (mean squared loss).
+    """
+    B, T, N, D = X_seq.shape
+    d0_matrix = compute_initial_distances_torch(X_gt[:, 0], A)  # (B, N, N)
+    loss = torch.tensor(0.0, device=X_seq.device)
+
+    for t in range(T):
+        indices = torch.where(A > 0)  # Get connected node indices
+        distances = torch.norm(X_seq[:, t, indices[0], :] - X_seq[:, t, indices[1], :], dim=-1)  # (B, num_edges)
+        loss += torch.sum((distances - d0_matrix[:, indices[0], indices[1]]) ** 2)
+
+    return loss / (B * T)  # Normalize by batch size and time steps
+
+
+
 # --------------------
 #  TRAINING LOOP
 # --------------------
@@ -70,6 +143,8 @@ def train(model,
     # Flatten motion size
     motion_dim = n_frames * n_joints * 3
 
+    A = adj_matrix().to(device) 
+
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
@@ -88,7 +163,9 @@ def train(model,
             # Forward pass with CLIP encoder -> motion predictor
             pred_motion = model(texts)  # shape => (batch_size, motion_dim) in float32
 
-            loss = criterion(pred_motion, gt_motion)
+            distance_loss = loss_distance_between_points_torch(gt_motion ,pred_motion, A)
+
+            loss = criterion(pred_motion, gt_motion) + distance_loss
             optimizer.zero_grad()
             loss.backward()
 
@@ -117,6 +194,7 @@ def train(model,
         print(f"[Epoch {epoch+1}] Val Loss: {val_loss:.4f}")
 
     print("Training complete!")
+
 
 
 if __name__ == '__main__':
