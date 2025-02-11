@@ -21,7 +21,7 @@ class CLIPTextEncoder(nn.Module):
 
         # Optional: A learnable linear projection from CLIP dimension -> embed_dim
         # If embed_dim == clip_dim, you can skip this projection
-        self.proj = nn.Linear(self.clip_dim, embed_dim)
+        #self.proj = nn.Linear(self.clip_dim, embed_dim)
 
     def forward(self, text_list):
         """
@@ -42,6 +42,6 @@ class CLIPTextEncoder(nn.Module):
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         # 4) Project to the desired embed_dim
-        text_emb = self.proj(text_features)  # (batch_size, embed_dim)
+        #text_emb = self.proj(text_features)  # (batch_size, embed_dim)
         
-        return text_emb
+        return text_features
