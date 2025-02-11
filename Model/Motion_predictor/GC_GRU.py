@@ -39,16 +39,40 @@ class GraphConvGRUCell(nn.Module):
 
 
 class GraphConvGRU(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers=1, seq_len=100):
+    def __init__(self, input_size = 32, hidden_size = 3, num_layers=1, seq_len=100):
         super(GraphConvGRU, self).__init__()
         self.num_layers = num_layers
         self.hidden_size = hidden_size
         self.seq_len = seq_len
         self.gru_cells = nn.ModuleList([GraphConvGRUCell(input_size if i == 0 else hidden_size, hidden_size) for i in range(num_layers)])
 
-    def forward(self, g, x):
+        self.graph = self.build_graph()
+
+    def build_graph(self):
+        adj_list = [
+            [0, 2, 5, 8, 11], 
+            [0, 1, 4, 7, 10], 
+            [0, 3, 6, 9, 12, 15], 
+            [9, 14, 17, 19, 21], 
+            [9, 13, 16, 18, 20]
+        ]
+        num_nodes = max(max(sublist) for sublist in adj_list) + 1
+        adj_matrix = np.zeros((num_nodes, num_nodes), dtype=int)
+
+        for sublist in adj_list:
+            for i in range(len(sublist)):
+                for j in range(i + 1, len(sublist)):
+                    node1, node2 = sublist[i], sublist[j]
+                    adj_matrix[node1, node2] = 1
+                    adj_matrix[node2, node1] = 1
+
+        src, dst = np.nonzero(adj_matrix)
+        g = dgl.graph((src, dst))
+
+        return g
+
+    def forward(self, x):
         """
-        g: DGL Graph (fixed topology)
         x: Fixed input vector (batch_size, input_size) (same for all timesteps)
         """
         batch_size = x.shape[0]
@@ -59,9 +83,9 @@ class GraphConvGRU(nn.Module):
         outputs = []
         for t in range(self.seq_len):  # Iterate over 100 timesteps
             for layer in range(self.num_layers):
-                h[layer] = self.gru_cells[layer](g, x, h[layer])
+                h[layer] = self.gru_cells[layer](self.graph, x, h[layer])
             
             outputs.append(h[-1].unsqueeze(1))  # Store last layer hidden state (graph features)
         
         outputs = torch.cat(outputs, dim=1)  # (batch_size, seq_len=100, num_nodes, hidden_size)
-        return outputs
+        return outputs.view(batch_size, -1)
