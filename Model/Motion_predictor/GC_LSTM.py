@@ -125,7 +125,7 @@ class GraphConvLSTM(nn.Module):
                 h[layer], c[layer] = self.lstm_cells[layer](
                     g_batch, x, h[layer], c[layer]
                 )
-            outputs.append(h[-1].unsqueeze(1))  # last layer hidden state
+            outputs.append(h[-1].view(B, N, self.hidden_size).unsqueeze(1))  # reshape properly
 
         print(len(outputs), outputs[0].size())
 
