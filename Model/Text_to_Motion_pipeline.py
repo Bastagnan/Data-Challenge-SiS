@@ -163,7 +163,7 @@ def train(model,
             # Forward pass with CLIP encoder -> motion predictor
             pred_motion = model(texts)  # shape => (batch_size, motion_dim) in float32
 
-            print(torch.reshape(gt_motion, (motion.size(0), 100, 22, 3)).size())
+            print(gt_motion.shape, pred_motion.shape)
 
             distance_loss = loss_distance_between_points_torch(torch.reshape(gt_motion, (motion.size(0), 100, 22, 3)) ,torch.reshape(pred_motion, (motion.size(0), 100, 22, 3)), A)
 
