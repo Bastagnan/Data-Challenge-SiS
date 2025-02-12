@@ -77,7 +77,7 @@ class TransformerMotionPredictor(nn.Module):
         motion = self.fc_out(dec_out)  # Shape: (B, num_frames, motion_per_frame)
         
         # Reshape to (B, num_frames, num_joints, 3)
-        motion = motion.view(batch_size, self.num_frames, self.num_joints, 3)
+        motion = motion.view(batch_size, self.num_frames* self.num_joints* 3)
         return motion
 
 
