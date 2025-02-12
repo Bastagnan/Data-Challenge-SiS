@@ -50,7 +50,7 @@ class MotionDataset(Dataset):
         self.ids_file  = ids_file
 
         if mean == None and std == None:
-            mean, std = ompute_normalization_params(data_dir, ids_file)
+            mean, std = compute_normalization_params(data_dir, ids_file)
 
         self.mean = mean
         self.std = std
