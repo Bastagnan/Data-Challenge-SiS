@@ -47,9 +47,9 @@ class MotionDataset(Dataset):
         motion = self.motions[index]
         motion_texts = self.texts[index]
         
-        ## pick random text
-        # text = random.choice(motion_texts)
-        # text = text.split('#')[0]
+        # # pick random text
+        text = random.choice(motion_texts)
+        text = text.split('#')[0]
         
         ## normalize motion
         if self.mean is not None and self.std is not None:
@@ -57,7 +57,7 @@ class MotionDataset(Dataset):
             
         motion = torch.from_numpy(motion)
         
-        return motion, motion_texts
+        return motion, text
     
 class TestDataset(Dataset):
     
