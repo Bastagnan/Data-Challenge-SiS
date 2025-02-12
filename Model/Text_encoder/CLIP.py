@@ -30,13 +30,17 @@ class CLIPTextEncoder(nn.Module):
         Returns:
             text_emb: A tensor of shape (batch_size, embed_dim).
         """
-        # 1) Tokenize the text (list of strings)
-        tokens = clip.tokenize(text_list, truncate=True).to(self.device)
-        
-        # 2) Extract text features from CLIP
-        with torch.no_grad():
-            text_features = self.clip_model.encode_text(tokens)
-        # text_features shape: (batch_size, clip_dim)
+        for i, text in enumerate(text_list):
+            # 1) Tokenize the text (list of strings)
+            tokens = clip.tokenize(text_list, truncate=True).to(self.device)
+            
+            # 2) Extract text features from CLIP
+            with torch.no_grad():
+                if i == 0:
+                    text_features = self.clip_model.encode_text(tokens)
+                else:
+                    text_features += self.clip_model.encode_text(tokens)
+            # text_features shape: (batch_size, clip_dim)
 
         # 3) (Optional) Normalize the CLIP embedding
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
