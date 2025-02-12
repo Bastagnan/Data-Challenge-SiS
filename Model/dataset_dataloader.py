@@ -7,12 +7,51 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+def compute_normalization_params(data_dir, ids_file):
+    """
+    Compute the mean and standard deviation for the motion data.
+    
+    Args:
+      data_dir (str): Base directory of the dataset.
+      ids_file (str): File containing a list of motion IDs.
+      
+    Returns:
+      mean (float): Global mean of the motion data.
+      std (float): Global standard deviation of the motion data.
+    """
+    # Read the list of IDs from the provided file.
+    with open(pjoin(data_dir, ids_file)) as fd:
+        list_ids = fd.read().strip().split('\n')
+    
+    # Initialize a list to store each motion array.
+    all_motions = []
+    
+    # Loop over the IDs, load each motion and add it to our list.
+    for file_id in tqdm(list_ids, desc='Computing normalization parameters'):
+        motion_path = pjoin(data_dir, 'motions', file_id + '.npy')
+        motion = np.load(motion_path)  # Expected shape: (T, J, 3)
+        all_motions.append(motion)
+    
+    # Stack all motions into a single NumPy array of shape (N, T, J, 3)
+    all_motions = np.stack(all_motions, axis=0)
+    
+    # Compute the global mean and std. This computes statistics over all values.
+    mean = all_motions.mean()
+    std = all_motions.std()
+    
+    return mean, std
+
+
 class MotionDataset(Dataset):
     
     def __init__(self, data_dir, ids_file, mean=None, std=None):
         
         self.data_dir = data_dir
         self.ids_file  = ids_file
+
+        if mean == None and std == None:
+            mean, std = ompute_normalization_params(data_dir, ids_file)
+
         self.mean = mean
         self.std = std
         
