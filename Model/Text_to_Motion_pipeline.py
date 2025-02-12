@@ -140,6 +140,7 @@ def train(model,
     # Optimizer & Loss
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
     # Flatten motion size
     motion_dim = n_frames * n_joints * 3
@@ -179,6 +180,8 @@ def train(model,
 
             total_loss += loss.item() * len(motions)
 
+        scheduler.step()
+        
         avg_loss = total_loss / len(train_loader.dataset)
         print(f"[Epoch {epoch+1}] Train Loss: {avg_loss:.4f}")
 
