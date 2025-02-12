@@ -113,8 +113,8 @@ class TransformerMotionPredictor(nn.Module):
       gcn_layers (int): Number of GCN layers for structural refinement.
     """
     def __init__(self, embed_dim, num_frames=100, num_joints=22, 
-                 num_layers=4, num_heads=8, dropout=0.1, 
-                 gcn_hidden=64, gcn_layers=2):
+                 num_layers=8, num_heads=8, dropout=0.1, 
+                 gcn_hidden=64, gcn_layers=4):
         super().__init__()
         self.num_frames = num_frames
         self.num_joints = num_joints
