@@ -19,21 +19,22 @@ from Motion_predictor.MLP import MLP
 # --------------------
 class Text2MotionPipeline(nn.Module):
     """
-    Encapsulate both:
-      1) a text encoder
-      2) a motion predictor (embedding -> motion)
+    Pipeline that first encodes text (using CLIP) and then generates motion
+    using a Transformer-based motion predictor.
     """
     def __init__(self, Text_Encoder, Motion_predictor, vocab_size=128, embed_dim=32, motion_dim=6600):
         super().__init__()
         self.text_encoder = Text_Encoder(vocab_size, embed_dim)
-        self.motion_predictor = Motion_predictor(embed_dim, motion_dim)
-
+        self.motion_predictor = Motion_predictor(embed_dim)
+    
     def forward(self, text_tokens):
-        # text_tokens is a list of strings
-        # We'll ensure that everything within text_encoder returns float32
-        text_emb = self.text_encoder(text_tokens)
-        # text_emb should be float32
-        motion_pred = self.motion_predictor(text_emb)
+        # text_tokens: list of strings.
+        # Get text embedding from CLIP encoder.
+        text_emb = self.text_encoder(text_tokens)  # Expected shape: (B, embed_dim)
+        # Generate motion from text embedding.
+        motion_pred = self.motion_predictor(text_emb)  # Shape: (B, 100, 22, 3)
+        # Depending on your training loop, you might flatten this to (B, motion_dim)
+        # For example: motion_pred = motion_pred.view(motion_pred.size(0), -1)
         return motion_pred
 
 
