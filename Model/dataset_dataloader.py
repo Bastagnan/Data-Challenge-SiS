@@ -57,7 +57,7 @@ class MotionDataset(Dataset):
             
         motion = torch.from_numpy(motion)
         
-        return motion, text
+        return motion, motion_texts
     
 class TestDataset(Dataset):
     
