@@ -167,7 +167,7 @@ def train(model,
 
             # print(torch.reshape(gt_motion, (gt_motion.size(0), 100, 22, 3)).shape, pred_motion.size())
 
-            distance_loss = loss_distance_between_points_torch(torch.reshape(gt_motion, (gt_motion.size(0), 100, 22, 3)) ,torch.reshape(pred_motion, (gt_motion.size(0), 100, 22, 3)), A)
+            # distance_loss = loss_distance_between_points_torch(torch.reshape(gt_motion, (gt_motion.size(0), 100, 22, 3)) ,torch.reshape(pred_motion, (gt_motion.size(0), 100, 22, 3)), A)
 
             loss = criterion(pred_motion, gt_motion) + distance_loss
             optimizer.zero_grad()
