@@ -41,6 +41,8 @@ class CLIPTextEncoder(nn.Module):
         # 3) (Optional) Normalize the CLIP embedding
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
+        print(type(text_features))
+
         # 4) Project to the desired embed_dim
         text_emb = self.proj(text_features)  # (batch_size, embed_dim)
         
