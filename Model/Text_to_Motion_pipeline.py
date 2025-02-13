@@ -30,8 +30,8 @@ class Text2MotionPipeline(nn.Module):
     def forward(self, text_tokens):
         # text_tokens: list of strings.
         # Get text embedding from CLIP encoder.
-        print("bbbbbbbb")
         text_emb = self.text_encoder(text_tokens)  # Expected shape: (B, embed_dim)
+        print(text_emb.shape)
         # Generate motion from text embedding.
         motion_pred = self.motion_predictor(text_emb)  # Shape: (B, 100, 22, 3)
         # Depending on your training loop, you might flatten this to (B, motion_dim)
