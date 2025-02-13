@@ -1,49 +1,11 @@
-import numpy as np
-import random
-import os
-from os.path import join as pjoin
-from tqdm import tqdm
-
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-import torch.optim as optim
-
-# Import your MotionDataset, CLIPTextEncoder, MLP from the same directory/package
-from dataset_dataloader import MotionDataset
-from Text_encoder.CLIP import CLIPTextEncoder
-from Motion_predictor.MLP import MLP
-
-# --------------------
-#  WRAPPER MODEL
-# --------------------
-class Text2MotionPipeline(nn.Module):
-    """
-    Pipeline that first encodes text (using CLIP) and then generates motion
-    using a Transformer-based motion predictor.
-    """
-    def __init__(self, Text_Encoder, Motion_predictor, vocab_size=128, embed_dim=32, motion_dim=6600):
-        super().__init__()
-        self.text_encoder = Text_Encoder(vocab_size, embed_dim)
-        self.motion_predictor = Motion_predictor(embed_dim)
-    
-    def forward(self, text_tokens):
-        # text_tokens: list of strings.
-        # Get text embedding from CLIP encoder.
-        text_emb = self.text_encoder(text_tokens)  # Expected shape: (B, embed_dim)
-        # Generate motion from text embedding.
-        motion_pred = self.motion_predictor(text_emb)  # Shape: (B, 100, 22, 3)
-        # Depending on your training loop, you might flatten this to (B, motion_dim)
-        # For example: motion_pred = motion_pred.view(motion_pred.size(0), -1)
-        return motion_pred
-
+import torch.nn.functional as F
 
 def adj_matrix():
     """
-    Create the adjacency matrix as a PyTorch tensor.
-    
-    Returns:
-    - A: Tensor of shape (N, N) representing the adjacency matrix.
+    Create the adjacency matrix as a PyTorch tensor for 22 joints.
+    This is based on a predefined skeletal grouping.
     """
     adj_list = [
         [0, 2, 5, 8, 11],
@@ -53,7 +15,7 @@ def adj_matrix():
         [9, 13, 16, 18, 20]
     ]
     
-    num_nodes = max(max(sublist) for sublist in adj_list) + 1
+    num_nodes = max(max(sublist) for sublist in adj_list) + 1  # expected 22 joints
     A = torch.zeros((num_nodes, num_nodes), dtype=torch.float32)
 
     for sublist in adj_list:
@@ -66,163 +28,158 @@ def adj_matrix():
     return A
 
 
-def compute_initial_distances_torch(X0, A):
+# -------------------------
+# Graph Convolutional Layer
+# -------------------------
+class GCNLayer(nn.Module):
+    def __init__(self, in_features, out_features):
+        """
+        A simple graph convolutional layer.
+        """
+        super(GCNLayer, self).__init__()
+        self.linear = nn.Linear(in_features, out_features)
+
+    def forward(self, x, adj):
+        """
+        Args:
+          x: Tensor of shape (B, num_nodes, in_features)
+          adj: Adjacency matrix of shape (num_nodes, num_nodes)
+        Returns:
+          out: Tensor of shape (B, num_nodes, out_features)
+        """
+        out = torch.matmul(adj, x)
+        out = self.linear(out)
+        return out
+
+
+# -------------------------------
+# Structural Refinement Module (GCN)
+# -------------------------------
+class StructuralRefinement(nn.Module):
+    def __init__(self, in_features=3, hidden_features=64, out_features=3, num_layers=2):
+        """
+        Refines per-frame joint predictions by enforcing structural (skeletal) priors.
+        """
+        super(StructuralRefinement, self).__init__()
+        self.input_proj = nn.Linear(in_features, hidden_features)
+        self.gcn_layers = nn.ModuleList(
+            [GCNLayer(hidden_features, hidden_features) for _ in range(num_layers)]
+        )
+        self.relu = nn.ReLU()
+        self.output_proj = nn.Linear(hidden_features, out_features)
+
+    def forward(self, x, adj):
+        """
+        Args:
+          x: Tensor of shape (B, num_joints, in_features)
+          adj: Adjacency matrix of shape (num_joints, num_joints)
+        Returns:
+          x: Refined tensor of shape (B, num_joints, out_features)
+        """
+        x = self.input_proj(x)
+        for layer in self.gcn_layers:
+            x = layer(x, adj)
+            x = self.relu(x)
+        x = self.output_proj(x)
+        return x
+
+
+# -----------------------------------------------
+# Transformer Motion Predictor (with FiLM Fusion and Residual Skip)
+# -----------------------------------------------
+class TransformerMotionPredictor(nn.Module):
     """
-    Compute d_{ij}^0 for each edge in the graph based on the initial positions.
+    Transformer-based motion predictor that conditions on a text embedding 
+    (e.g., from CLIP) to generate a motion sequence.
     
-    Args:
-    - X0: Tensor of shape (B, N, D), initial node positions for the batch.
-    - A: Tensor of shape (N, N), adjacency matrix.
-    
-    Returns:
-    - d0_matrix: Tensor of shape (B, N, N) with initial edge distances.
+    Added modifications:
+      - Direct injection/fusion (via FiLM conditioning) of the text embedding.
+      - Residual skip-connections from the text embedding.
     """
-    indices = torch.where(A > 0)  # Get indices of connected nodes
-    d0_matrix = torch.zeros_like(A, dtype=torch.float32).unsqueeze(0).expand(X0.shape[0], -1, -1)  # (B, N, N)
-    
-    distances = torch.norm(X0[:, indices[0], :] - X0[:, indices[1], :], dim=-1)  # (B, num_edges)
-    d0_matrix[:, indices[0], indices[1]] = distances
-    d0_matrix[:, indices[1], indices[0]] = distances  # Symmetric
-    
-    return d0_matrix
-
-def loss_distance_between_points_torch(X_gt, X_seq, A):
-    """
-    Compute the batch loss ensuring that each edge maintains its initial distance.
-    
-    Args:
-    - X_seq: Tensor of shape (B, T, N, D), node positions over time for a batch.
-    - A: Tensor of shape (N, N), adjacency matrix.
-    
-    Returns:
-    - loss: Scalar tensor (mean squared loss).
-    """
-    B, T, N, D = X_seq.shape
-    d0_matrix = compute_initial_distances_torch(X_gt[:, 0], A)  # (B, N, N)
-    loss = torch.tensor(0.0, device=X_seq.device)
-
-    for t in range(T):
-        indices = torch.where(A > 0)  # Get connected node indices
-        distances = torch.norm(X_seq[:, t, indices[0], :] - X_seq[:, t, indices[1], :], dim=-1)  # (B, num_edges)
-        loss += torch.sum((distances - d0_matrix[:, indices[0], indices[1]]) ** 2)
-
-    return loss / (B * T)  # Normalize by batch size and time steps
-
-
-
-# --------------------
-#  TRAINING LOOP
-# --------------------
-def train(model, 
-          data_dir='/kaggle/input/motion',  # point to Kaggle dataset
-          train_loader = None,
-          val_loader = None,
-          num_epochs=10, 
-          batch_size=16, 
-          lr=1e-3,
-          n_frames=100, 
-          n_joints=22):
-
-    if train_loader == None and val_loader == None:
-        # Create dataset / dataloaders
-        train_set = MotionDataset(data_dir, 'train.txt', mean=None, std=None)
-        valid_set = MotionDataset(data_dir, 'val.txt', mean=None, std=None)
+    def __init__(self, embed_dim, num_frames=100, num_joints=22, 
+                 num_layers=8, num_heads=8, dropout=0.1, 
+                 gcn_hidden=64, gcn_layers=4):
+        super().__init__()
+        self.num_frames = num_frames
+        self.num_joints = num_joints
+        self.embed_dim = embed_dim
+        self.motion_per_frame = num_joints * 3  # 22 joints x 3 coordinates
         
-        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False)
-
-    # On GPU if available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
-    # Force the model to use float32 (fixes any mismatch with half precision)
-    model = model.float()
-
-    # Optimizer & Loss
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
-
-    # Flatten motion size
-    motion_dim = n_frames * n_joints * 3
-
-    A = adj_matrix().to(device) 
-
-    for epoch in range(num_epochs):
-        model.train()
-        total_loss = 0
+        # Learnable query tokens and positional embeddings.
+        self.query_tokens = nn.Parameter(torch.randn(num_frames, embed_dim))
+        self.pos_embedding = nn.Parameter(torch.randn(num_frames, embed_dim))
         
-        for motions, texts in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            # motions: (batch_size, n_frames, n_joints, 3)
-            # texts: list of strings
+        # Transformer decoder with causal masking
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=embed_dim, 
+            nhead=num_heads, 
+            dropout=dropout,
+            batch_first=False  # Input shape: (seq_length, batch_size, embed_dim)
+        )
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        
+        # Final projection: from transformer features to per-frame motion (flattened joints).
+        self.fc_out = nn.Linear(embed_dim, self.motion_per_frame)
+        
+        # Structural refinement: refines each frame's joint positions using a GCN.
+        self.struct_refine = StructuralRefinement(in_features=3, 
+                                                  hidden_features=gcn_hidden, 
+                                                  out_features=3, 
+                                                  num_layers=gcn_layers)
+        
+        # Register the skeletal adjacency matrix as a buffer (non-trainable)
+        self.register_buffer("adj", adj_matrix())
+        
+        # Direct Injection/Fusion: FiLM parameters from text embedding.
+        self.gamma_proj = nn.Linear(embed_dim, embed_dim)
+        self.beta_proj = nn.Linear(embed_dim, embed_dim)
 
-            motions = motions.to(device)
-            # Also ensure motions are float32
-            motions = motions.float()
-
-            # Flatten GT motion
-            gt_motion = motions.view(motions.size(0), -1)  # (batch_size, motion_dim)
-
-            # Forward pass with CLIP encoder -> motion predictor
-            pred_motion = model(texts)  # shape => (batch_size, motion_dim) in float32
-
-            # print(torch.reshape(gt_motion, (gt_motion.size(0), 100, 22, 3)).shape, pred_motion.size())
-
-            # distance_loss = loss_distance_between_points_torch(torch.reshape(gt_motion, (gt_motion.size(0), 100, 22, 3)) ,torch.reshape(pred_motion, (gt_motion.size(0), 100, 22, 3)), A)
-
-            loss = criterion(pred_motion, gt_motion) #+ distance_loss
-            optimizer.zero_grad()
-            loss.backward()
-
-            # Gradient clipping to prevent exploding gradients
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-            optimizer.step()
-
-            total_loss += loss.item() * len(motions)
-
-        scheduler.step()
-
-        avg_loss = total_loss / len(train_loader.dataset)
-        print(f"[Epoch {epoch+1}] Train Loss: {avg_loss:.4f}")
-
-        # Validation
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for motions, texts in val_loader:
-                motions = motions.to(device).float()
-                gt_motion = motions.view(motions.size(0), -1)
-                pred_motion = model(texts)
-                loss = criterion(pred_motion, gt_motion)
-                val_loss += loss.item() * len(motions)
-
-        val_loss /= len(val_loader.dataset)
-        print(f"[Epoch {epoch+1}] Val Loss: {val_loss:.4f}")
-
-    print("Training complete!")
-
-
-
-if __name__ == '__main__':
-    # Suppose your motion is shape (100 frames, 22 joints, 3 coords) => motion_dim=6600
-    motion_dim = 100 * 22 * 3
-
-    # Build the pipeline
-    model = Text2MotionPipeline(
-        Text_Encoder=CLIPTextEncoder,
-        Motion_predictor=MLP,
-        vocab_size=128,  # not used by CLIP, but must be passed
-        embed_dim=32,    # your chosen dimension (CLIP gets projected to 32)
-        motion_dim=motion_dim
-    )
-
-    # Train
-    train(
-        model=model,
-        data_dir='/kaggle/input/motion',  # make sure Kaggle dataset has train.txt/val.txt
-        num_epochs=10,
-        batch_size=16,
-        lr=1e-3,
-        n_frames=100,
-        n_joints=22
-    )
+    def forward(self, text_emb):
+        """
+        Args:
+          text_emb (Tensor): Text embedding of shape (B, embed_dim)
+        Returns:
+          refined_motion (Tensor): Motion tensor of shape (B, num_frames*num_joints*3)
+        """
+        batch_size = text_emb.size(0)
+        
+        # Prepare memory for the decoder.
+        memory = text_emb.unsqueeze(0)  # (1, B, embed_dim)
+        
+        # Prepare autoregressive query tokens with positional embeddings.
+        queries = self.query_tokens + self.pos_embedding  # (num_frames, embed_dim)
+        queries = queries.unsqueeze(1).expand(-1, batch_size, -1)  # (num_frames, B, embed_dim)
+        
+        # Create a causal mask so that each time step only attends to previous ones.
+        tgt_mask = torch.triu(torch.full((self.num_frames, self.num_frames), float('-inf')), diagonal=1)
+        tgt_mask = tgt_mask.to(text_emb.device)
+        
+        # Transformer decoder (autoregressive due to tgt_mask).
+        dec_out = self.decoder(tgt=queries, memory=memory, tgt_mask=tgt_mask)  # (num_frames, B, embed_dim)
+        dec_out = dec_out.transpose(0, 1)  # (B, num_frames, embed_dim)
+        
+        # ----- Direct Injection/Fusion (FiLM conditioning) -----
+        # Compute scaling (gamma) and bias (beta) from the text embedding.
+        gamma = self.gamma_proj(text_emb).unsqueeze(1)  # (B, 1, embed_dim)
+        beta = self.beta_proj(text_emb).unsqueeze(1)    # (B, 1, embed_dim)
+        # FiLM modulation: modulate the transformer output.
+        dec_out = dec_out * (1 + gamma) + beta
+        
+        # ----- Residual Skip-Connection -----
+        # Add the text embedding (broadcasted to every frame) as a residual signal.
+        text_res = text_emb.unsqueeze(1).expand(-1, self.num_frames, -1)  # (B, num_frames, embed_dim)
+        dec_out = dec_out + text_res
+        
+        # Project to motion vector (flattened joints per frame).
+        motion = self.fc_out(dec_out)  # (B, num_frames, motion_per_frame)
+        motion = motion.view(batch_size, self.num_frames, self.num_joints, 3)
+        
+        # -------------------------------
+        # Structural refinement via the GCN
+        # -------------------------------
+        # Process each frame independently.
+        motion_reshaped = motion.view(batch_size * self.num_frames, self.num_joints, 3)
+        refined_motion = self.struct_refine(motion_reshaped, self.adj)
+        refined_motion = refined_motion.view(batch_size, self.num_frames, self.num_joints, 3)
+        
+        return refined_motion.view(batch_size, self.num_frames * self.num_joints * 3)
