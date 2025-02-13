@@ -3,8 +3,9 @@ import torch.nn as nn
 class MLP(nn.Module):
     def __init__(self, text_embed_dim=32, motion_dim=6600):
         super().__init__()
-        self.fc1 = nn.Linear(text_embed_dim, 128)
-        self.fc2 = nn.Linear(128, motion_dim)
+        self.fc1 = nn.Linear(text_embed_dim, 512)
+        self.fc2 = nn.Linear(512, 1028)
+        self.fc3 = nn.Linear(1028, motion_dim)
         self.relu = nn.ReLU()
 
     def forward(self, text_emb):
@@ -14,5 +15,6 @@ class MLP(nn.Module):
         """
 
         x = self.relu(self.fc1(text_emb))
-        x = self.fc2(x)
+        x = self.relu(self.fc2(x))
+        x = self.fc3(x)
         return x
