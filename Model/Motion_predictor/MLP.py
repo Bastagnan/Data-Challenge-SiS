@@ -12,6 +12,7 @@ class MLP(nn.Module):
         text_emb: (batch_size, text_embed_dim)
         returns motion: (batch_size, motion_dim)
         """
+        print('aaaaa',type(text_emb))
         x = self.relu(self.fc1(text_emb))
         x = self.fc2(x)
         return x

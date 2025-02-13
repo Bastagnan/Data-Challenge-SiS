@@ -30,7 +30,6 @@ class CLIPTextEncoder(nn.Module):
         Returns:
             text_emb: A tensor of shape (batch_size, embed_dim).
         """
-        print("aaaaaaa")
         # 1) Tokenize the text (list of strings)
         tokens = clip.tokenize(text_list, truncate=True).to(self.device)
         
